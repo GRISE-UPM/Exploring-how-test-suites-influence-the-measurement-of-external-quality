@@ -1,0 +1,593 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+%Template version as of 6/27/2024
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{listings}
+% Definitions for listings
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+\lstset{frame=none, % tblr
+  language=Java,
+  escapeinside={\%*}{*)},          % if you want to add LaTeX within your code
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\scriptsize\ttfamily},
+  numbers=none,
+  numberstyle=\scriptsize\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{dkgreen},
+  stringstyle=\color{mauve},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=1,
+  moredelim=[is][\sout]{¡}{¡},
+}
+
+\usepackage[commandnameprefix=always,authormarkup=none]{changes}
+% Definitions for changes
+\definechangesauthor[color=red]{V1}
+\setcommentmarkup{\todo[inline]{\phantom{authorcommentcount} #1}}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+    
+\begin{document}
+
+\title{Exploring how test suites influence the measurement of external quality\\
+\thanks{This research was funded by grant PID2022-137846NB-I00 funded by MCIN/AEI/10.13039/501100011033, by "ERDF A way of making Europe."}
+}
+
+\author{\IEEEauthorblockN{Oscar Dieste}
+\IEEEauthorblockA{\textit{Universidad Politécnica de Madrid}\\
+Boadilla del Monte, Spain \\
+0000-0002-3060-7853}
+\and
+\IEEEauthorblockN{José Ignacio Panach}
+\IEEEauthorblockA{\textit{Universidad Politécnica de Valencia}\\
+Valencia, Spain \\
+0000-0002-7043-6227}
+}
+
+\maketitle
+
+\begin{abstract}
+\textbf{Context:} Test suites are routinely used to measure specific code properties, such as external quality. However, different test suites may yield different measurements for the same code, even affecting group-level statistical analyses.
+\textbf{Objective:} To study which aspects of a test suite, e.g., number and type of tests, calculation formulas, etc., influence measurement processes. We will focus on analyzing external quality.
+\textbf{Methodology:} Empirical modeling using R. Scenario creation and case analysis.
+\textbf{Results:} The main issue in designing test suites for measurement is the need for better alignment between the object being measured and the test cases. The existence of redundant test cases artificially inflates the quality. Always passing/failing test cases and missing test cases increase/decrease the quality depending on their type and number.
+\textbf{Conclusions:} It seems advisable to design test suites so that each aspect evaluated in the code (requirement or sub-requirement) has only one associated test case. Experimental subjects should also be informed about whether or not they should implement error cases, and the measurement should be performed accordingly. However, a more thorough analysis is needed before making general recommendations.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Experiment, test suite, bias
+\end{IEEEkeywords}
+
+<<setup, echo=FALSE, message=FALSE, warning=FALSE, results='hide'>>=
+source("common.R")
+@
+\normalsize
+
+\section{Introduction}\label{sec:introduction}
+
+The measurement of code-related response variables, such as external quality, is often carried out using test suites. In a related work \cite{uyaguari2024relevant}, we identified 18 experiments in Test-Driven Development (TDD) that measure quality using test suites. The measurement of response variables using test suites is not exclusive to TDD and has been used in other areas of SE, e.g., \cite{kieburtz1996software,knight1986experimental,feldt1998generating}. Consequently, test suites are measurement tools that are relevant to empirical research methodologies.
+
+Test suites are one of the main sources of uncertainty in measurement \cite{dieste2021test}. For example, the FS experiment \cite{tosun2017industry} compared the use of TDD vs. Iterative Test-Last Development (ITLD) in a \textit{greenfield} environment (i.e., development from scratch, as opposed to using legacy code). FS used two experimental tasks (Mars Rover --MR-- and Bowling Score Keeper --BSK--). For each experimental task, two test suites were generated%
+\footnote{The test suites are provided as a single Eclipse workspace containing four projects. They are available as one Eclipse workspace at \url{https://github.com/GRISE-UPM/TestSuitesMeasurement/tree/master/test_suites}.} %
+using two different techniques: ad hoc (AH) and equivalence partitioning (EP). The analysis of the FS experiment, differentiated by the test suite, produces the following results \cite{uyaguari2024relevant}:
+
+\begin{table}[H]
+	\footnotesize
+	\centering
+	\caption{Statistical analysis of the Quality response variable for the AH and EP test suites}
+	\label{tab:fernando-testcases-equivpart-syntactic}
+	\begin{tabular}{l c c}
+		\hline
+		& Ad-hoc & Equivalence partitioning \\
+		\hline
+		(Intercept)             & $63.72 \; (6.00)^{***}$ & $42.58 \; (4.50)^{***}$ \\
+		TreatmentTDD-greenfield & $21.93 \; (8.48)^{*}$   & $-12.84 \; (6.37)^{*}$  \\
+		\hline
+		R$^2$                   & $.13$                   & $.08$                   \\
+		Adj. R$^2$              & $.11$                   & $.06$                   \\
+		Num. obs.               & $48$                    & $48$                    \\
+		\hline
+		\multicolumn{3}{l}{\scriptsize{$^{***}p<0.001$; $^{**}p<0.01$; $^{*}p<0.05$}}
+	\end{tabular}
+	
+\end{table}
+\noindent Table~\ref{tab:fernando-testcases-equivpart-syntactic} indicates that, when using the AH test suite, TDD outperforms ITLD by 21.93 units (which, in the case of the FS experiment, represented the percentage of user stories or requirements implemented by programmers). However, ITLD outperforms TDD by 12.84 units when using the EP test suite. Both results are statistically significant, but common sense indicates they cannot be true simultaneously. The difference in measurements is in the test suites used; some test suites (EP) tend to yield lower measurements than others (AH), which explains the observed values.
+
+This working paper aims to study how test suites affect measurements. We have empirically modeled programs, test suites, and test cases. The model allows for exploring different measurement scenarios and deriving conclusions. The contributions of this research are as follows:
+\begin{itemize}
+    \item An empirical model of external quality measurement using test suites.
+    \item A preliminary assessment of the influence of test suites-based measurement in the values and associated statistical analysis of the quality response variable.
+\end{itemize}
+
+This paper's LaTex code is available on \href{https://github.com/GRISE-UPM/Exploring-how-test-suites-influence-the-measurement-of-external-quality}{GitHub}. It is structured as follows: Section~\ref{sec:modeling} describes how programs, test suites and test cases have been modeled, and the measurement process. Section~\ref{sec:analysis} shows how the test cases influence quality measurement. The impact of the test cases in the experimental analysis is described in Section~\ref{sec:impact}. The future work and conclusions are reported in Sections\ref{sec:future} and \ref{sec:conclusions}, respectively. 
+
+\section{Empirical Modeling}\label{sec:modeling}
+
+An empirical model is a statistical model based on a large amount of experimental data \cite{xiao2023comprehensive}. The empirical model is based on observation and experiment \cite{chen2001empirical}; it does not aim to characterize all dimensions of the object under study but rather those relevant to the stated research objective.
+
+In our case, we will create an empirical model of the test suites to understand the influence of the test cases on measurement. We will focus on the external quality of the code, as we are well acquainted with this response variable thanks to our research in TDD \cite{fucci2015towards,tosun2017industry,tosun2019investigating,santos2021family}.
+
+\subsection{Program Modeling}
+
+There are multiple ways to measure code quality. In TDD experiments, it is usual to consider quality from an external perspective and define it as the degree of compliance with a set of requirements. These requirements are provided to the experimental subjects, and the experimental task consists of implementing those requirements. The specific value of external quality for a program will depend on the number of requirements implemented.
+
+This way of considering external quality allows for straightforward program modeling. We can consider a program as a vector $r_1, r_2, \dots r_n$, where each $r_i$ is a requirement that can take a value of $0$ (the requirement has not been implemented) or $1$ (if it has been implemented). External quality would then be $QLTY = \sum_{i=1}^{n}r_i$. For now, we can consider the range of the response variable to be $0 \dots n$.
+
+We are not interested in analyzing a specific program but in studying the behavior of test suites across all possible programs. To this end, we can use a matrix:
+
+\scriptsize
+<<echo = TRUE>>=
+allPossiblePrograms <- expand.grid(
+  r1 = 0:1, r2 = 0:1, r3 = 0:1, r4 = 0:1, r5 = 0:1,
+  r6 = 0:1, r7 = 0:1, r8 = 0:1, r9 = 0:1, r10 = 0:1)
+@
+\normalsize
+
+\noindent which contains all possible programs that experimental subjects can create, defined based on the requirements they satisfy. Since we intend to run simulations on the model, we need to assign values to it, although the specific values are unimportant. In this research, the example program will have ten requirements (from $r_1$ to $r_{10}$), which is quite similar to the FS experiment, where the experimental tasks MR and BSK had 10 and 14 requirements, respectively \cite{dieste2021test}. When a requirement $r_i$ is satisfied, we mark it as $1$, and $0$ otherwise; this approach simplifies subsequent calculations.
+
+The matrix $allPossiblePrograms$ contains all relevant information for measurement. For example, program \#25 satisfies the following requirements:
+
+\scriptsize
+<<results = TRUE, echo = TRUE>>=
+allPossiblePrograms[25,]
+@
+\normalsize
+
+\noindent Therefore, intuitively, its quality is $2$. However, in a real-world scenario, we do not know which requirements a program satisfies, which is precisely why we need test suites, as explained below.
+
+\subsection{Modeling Test Suites}
+
+Assuming that test cases are deterministic (otherwise, the analysis becomes more complex and exceeds the objectives of this working paper), we can divide test cases into four categories:
+\begin{itemize}
+
+\item \textit{Redundant:} These test cases repeatedly evaluate the same requirement. For example, in the code shown below:
+\begin{lstlisting}
+public void testMethod1() {
+     assertEquals(2, factorial(2));
+}
+
+public void testMethod2() {
+     assertEquals(6, factorial(3));
+}
+\end{lstlisting}
+\noindent \lstinline{testMethod2()} is redundant because \lstinline{testMethod1()} and \lstinline{testMethod2()} pass or fail simultaneously (at least, in a standard iterative or recursive implementation).
+
+\item \textit{Tests that always succeed:} This is a rare but entirely possible case. For example, in one of the test suites that we used to measure BSK \cite{dieste2021test}, there was a test case:
+\begin{lstlisting}
+public void testFrameIsCreatedWithCorrectName(){
+     Frame f  = new Frame();
+     assertEquals("Frame", f.getClass().getSimpleName());
+}
+\end{lstlisting}
+\noindent which always passed because the experimental subjects received code stubs that included a \lstinline{Frame} class%
+\footnote{Very few experimental subjects modified the code stub, though it did happen in some cases. From this perspective, \lstinline{testFrameIsCreatedWithCorrectName()} would be a non-deterministic test case with a low probability of failing.}%
+\footnote{It could be argued that \lstinline{testFrameIsCreatedWithCorrectName()} is not suitable for measuring external quality. However, such a judgment involves critically analyzing the test cases, making generalization difficult. This is why we do not intend to evaluate specific test cases in this working paper.}%
+.
+
+\item \textit{Tests that always fail:} This case is pervasive and is mainly driven by assumptions not explicitly declared in the requirements. For example, in BSK, the knocked-down pins of a \lstinline{Frame} must be within the $[0..10]$ range. It is reasonable for the experimental subject to control this value, so the following test should pass:
+\begin{lstlisting}
+@Test(expected = Exception.class)
+public void equivalencePartitioning03_US01() {
+		Frame f = new Frame(11,0);
+}
+\end{lstlisting}
+\noindent However, the BSK task specification did not mention throwing exceptions. Additionally, in TDD experiments, the time allocated to experimental tasks is limited, so the experimental subjects focus on implementing explicit requirements and often overlook implicit requirements. Consequently, the previous test always failed%
+\footnote{As with \lstinline{testFrameIsCreatedWithCorrectName()}, there is a certain probability that \lstinline{equivalencePartitioning03_US01()} will pass.}%
+.
+
+\item A fourth type of test case could be identified, which could be called \textit{complementary}. For example, the specification of the well-known \texttt{max()} function, which returns the larger of two numbers: 
+\begin{center}
+$P:\{ (a > b) \lor (a \leq b) \}$ \\
+\lstinline{max()} \\
+$Q:\{ (a > b\ \land max = a) \lor (a \leq b\ \land max = b) \}$
+\end{center}
+
+\noindent requires two cases for its testing: one that tests the input condition $(a > b)$ and another that tests $(a \leq b)$. Certain test case design techniques, such as equivalence partitioning, quickly identify such cases. 
+
+Considering \textit{complementary} cases is perfectly reasonable and also allows for distinguishing between "simple" and "complex" requirements, at least based on the number of equivalence partitions. However, it does not seem necessary to include \textit{complementary} test cases in the empirical model. They can be understood as sub-requirements $r_{i1}, r_{i2}, ..., r_{ij}$, i.e., \textit{complementary} test cases suggest the need to refine the object being measured by considering the requirements in a finer-grained fashion. We will opt for this latter approach as it considerably simplifies the empirical model's formulation.
+
+\end{itemize}
+
+Intuitively, a test suite should not have redundant tests or tests that always pass/fail. Consequently, an ideal test suite can be modeled%
+\footnote{The \texttt{prepare()} function, which essentially involves a row-column transposition, makes the measurement easier to understand as it avoids the use of the \texttt{apply} function.} %
+as a \textit{data frame}:
+
+\scriptsize
+<<echo = TRUE>>=
+prepare <- function(df) {
+  tmp <- transpose(df)
+  colnames(tmp) <- paste0(rep("R", 10), seq(1, 10))
+  rownames(tmp) <- colnames(df)
+  tmp
+}
+
+correctTestSuite <- 
+  prepare(data.frame( 
+    tests              = c(1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+    alwaysFailingTests = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    alwaysPassingTests = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
+@
+\normalsize
+
+\noindent with the following meaning:
+\begin{itemize}
+\item \textbf{\texttt{test} field:} The implementation of a requirement is verified through a single test case, where each position $i$ of the vector represents the requirement $r_i$.
+\item \textbf{\texttt{alwaysFailingTests} field:} For each requirement, tests may always fail.
+\item \textbf{\texttt{alwaysPassingTests} field:} Similarly, there may be tests that always pass.
+\end{itemize}
+
+\subsection{Measurement}
+
+Using \texttt{testSuite}, the measurement of the external quality of a program can be performed as an arithmetic operation. For example, the measurement of program \#25 is:
+
+\scriptsize
+<<results = TRUE, echo = TRUE>>=
+identifiedImplementedRequirements <-
+  allPossiblePrograms[25,] * 
+     correctTestSuite["tests",] - 
+     correctTestSuite["alwaysFailingTests",] + 
+     correctTestSuite["alwaysPassingTests",]
+@
+\normalsize
+
+\noindent and, as expected, the value of the external quality is:
+
+\scriptsize
+<<results = TRUE, echo = TRUE>>=
+sum(identifiedImplementedRequirements)
+@
+\normalsize
+
+\subsection{Other considerations}\label{sec:II:finales}
+
+A specific requirement may not have any associated test case. This has two possible interpretations.
+\begin{itemize}
+\item On one hand, researchers may be aware of a specific requirement, but it has no associated test cases, probably due to an error. These test cases could be referred to as \textit{absent}. \textit{Absent} test cases can be easily modeled by indicating $0$ in the corresponding position of the \textit{data frame}:
+
+\scriptsize
+<<echo = TRUE>>=
+testSuiteWithMissingTestCases <- 
+  prepare(data.frame( 
+    tests              = c(1, 1, 1, 0, 0, 1, 1, 1, 1, 1),
+    alwaysFailingTests = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    alwaysPassingTests = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
+@
+\normalsize
+
+\noindent where we indicate that the test suite has no test cases for requirements $r_4$ and $r_5$, resulting in the measurement of the program \#25 yielding the following outcome:
+
+\scriptsize
+<<results = TRUE, echo = FALSE>>=
+partiallyIdentifiedImplementedRequirements <-
+  allPossiblePrograms[25,] * 
+     testSuiteWithMissingTestCases["tests",] - 
+     testSuiteWithMissingTestCases["alwaysFailingTests",] + 
+     testSuiteWithMissingTestCases["alwaysPassingTests",]
+
+sum(partiallyIdentifiedImplementedRequirements)
+@
+\normalsize
+
+\noindent which is expected.
+
+\item On the other hand, the fact that researchers are unaware of a requirement does not affect the measurement. Such a requirement is simply not considered in the measurement and, for practical purposes, can be ignored. However, this ignored requirement introduces a threat to conclusion validity; while this is an important issue, it is out of the scope of the current working paper.
+\end{itemize}
+
+\section{Analysis}\label{sec:analysis}
+
+The presence of redundant test cases or test cases that always fail/pass affects the values obtained in the measurement. The effects depend on the type of test case being considered.
+
+\subsection{Redundant Test Cases}
+
+There are two possible scenarios: all requirements have the same number of redundant tests, or the number varies across requirements. We simulated these two situations using the test suites \texttt{testSuiteWithRedundanciesInAllTestCases} and \texttt{testSuiteWithRedundanciesInSomeTestCases}, as shown below. We included two redundant tests for requirements $r_4$ and $r_5$ to observe their effect, although a single redundant test would suffice.
+
+\scriptsize
+<<echo = TRUE>>=
+testSuiteWithRedundanciesInAllTestCases <- 
+  prepare(data.frame( 
+    tests              = c(2, 2, 2, 2, 2, 2, 2, 2, 2, 2),
+    alwaysFailingTests = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    alwaysPassingTests = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
+
+testSuiteWithRedundanciesInSomeTestCases <- 
+  prepare(data.frame( 
+    tests              = c(1, 1, 1, 2, 2, 1, 1, 1, 1, 1),
+    alwaysFailingTests = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    alwaysPassingTests = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
+@
+\normalsize
+
+<<>>=
+allMeasures <- function(programs, testSuite) {
+    apply(programs, 
+          1, 
+          function(row) sum(row * testSuite["tests",] - 
+                            testSuite["alwaysFailingTests",] +
+                            testSuite["alwaysPassingTests",])
+    )
+}
+
+correctMeasures <- 
+     allMeasures(allPossiblePrograms, 
+                 correctTestSuite)
+measuresWithRedundanciesInAllTestCases <- 
+     allMeasures(allPossiblePrograms, 
+                 testSuiteWithRedundanciesInAllTestCases)
+measuresWithRedundanciesInSomeTestCases <- 
+     allMeasures(allPossiblePrograms, 
+                 testSuiteWithRedundanciesInSomeTestCases)
+@
+
+Two test suites can be compared using a scatterplot, as shown in Figs.~\ref{fig:redundantes:lineal} and \ref{fig:redundantes:nolineal}. On the horizontal axis, we indicate the values measured using \texttt{correctTestSuite}, while on the vertical axis, we represent the values measured using \texttt{testSuiteWithRedundanciesInAllTestCases} and \texttt{testSuiteWithRedundanciesInSomeTestCases}, respectively. If the redundant test suites were measured correctly, all points would lie on the diagonal line. Points outside this line represent measurement discrepancies.
+%, i.e., instances where the measurements from \texttt{correctTestSuite} and \texttt{testSuiteWithRedundanciesInAllTestCases} (or \texttt{testSuiteWithRedundanciesInSomeTestCases}) differ.
+
+\begin{figure}
+<<>>=
+plot(correctMeasures,
+     measuresWithRedundanciesInAllTestCases)
+
+abline(a = 0, b = 1)
+@
+\caption{Redundant test cases producing a slope change}
+\label{fig:redundantes:lineal}
+\end{figure}
+
+\begin{figure}
+<<>>=
+plot(correctMeasures,
+     measuresWithRedundanciesInSomeTestCases)
+abline(a = 0, b = 1)
+@
+\caption{Redundant test cases producing a non-linear transformation}
+\label{fig:redundantes:nolineal}
+\end{figure}
+
+Figs.~\ref{fig:redundantes:lineal} and \ref{fig:redundantes:nolineal} differ in the relationship between correct measurement and measurement with redundant test cases. In Fig.~\ref{fig:redundantes:lineal}, it is observed that measurement with \texttt{testSuiteWithRedundanciesInAllTestCases} produces a linear transformation of the correct measurement, multiplying the slope of the diagonal line by $2$, because:
+
+\begin{equation}
+\label{eq1}
+\begin{aligned}
+\sum_{i=1}^{\#req} \#test(redundant)_i = b * \sum_{i=1}^{\#req}test(correct)_i
+\end{aligned}
+\end{equation}
+
+\noindent where $b = 2$ in this case, $\#test(redundant)_i$ represents the number of tests in the \texttt{testSuiteWithRedundanciesInAllTestCases}, and $\#test(correct)_i$ represents the number of tests in \texttt{correctTestSuite}. However, the situation in Fig.~\ref{fig:redundantes:nolineal} differs. It is clear that several points on the Y-axis correspond to the same point on the X-axis; that is, there are discrepancies between the measurement with \texttt{correctTestSuite} and \texttt{testSuiteWithRedundanciesInSomeTestCases} that cannot be modeled with a functional transformation. These discrepancies arise in all programs that satisfy requirements $r_4$ and/or $r_5$. The measurement of these programs will generate values higher by one or two units compared to the correct measurements.
+
+\subsection{Missing Test Cases}
+
+\textit{Absent} test cases, mentioned in Section~\ref{sec:II:finales}, have the same effects as \textit{redundant} test cases. The only difference is that, instead of $2, 3, ...$ test cases per requirement, there are $0$, resulting in measurements smaller than expected. For instance, Fig.~\ref{fig:missing}, which compares measurements obtained using the \texttt{correctTestSuite} and \texttt{testSuiteWithMissingTestCases}, shows the same pattern as Fig.~\ref{fig:redundantes:nolineal}, although in this case, the points are located below the diagonal.
+
+\begin{figure}
+<<>>=
+measuresWithMissingTestCases <- 
+     allMeasures(allPossiblePrograms, 
+                 testSuiteWithMissingTestCases)
+
+plot(correctMeasures,
+     measuresWithMissingTestCases )
+
+abline(a = 0, b = 1)
+@
+\caption{Missing test cases producing a non-linear transformation}
+\label{fig:missing}
+\end{figure}
+
+\subsection{Test Cases That Always Pass/Fail}
+
+The existence of tests that always succeed or fail increases the measurement by a value $a$, which depends on the number of always-passing/failing tests present. 
+\begin{equation}
+\label{eq2}
+\begin{aligned}
+\sum_{i=1}^{\#req}(test_i + \underbrace{alwaysPassing_i + alwaysFailing_i}_{constant}) =\\
+a + \sum_{i=1}^{\#req}test_i
+\end{aligned}
+\end{equation}
+
+This effect can be visualized in Fig.~\ref{fig:passing-failing}, using a straightforward test suite such as:
+
+\scriptsize
+<<echo = TRUE>>=
+testSuiteWithPassingFailingCases <- 
+  prepare(data.frame( 
+  tests              = c(1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+  alwaysFailingTests = c(1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+  alwaysPassingTests = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
+@
+\normalsize
+
+\noindent which contains only one test case that always fails. The points that deviate from the solid diagonal line appear below since $a = -1$ in this case. The presence of test cases that always pass/fail results in modifying the intercept of the correct measurement, which changes from $0$ to the value $a$.
+
+\begin{figure}
+<<>>=
+measuresWithPassingFailingTestCases <- 
+     allMeasures(allPossiblePrograms, 
+                 testSuiteWithPassingFailingCases)
+
+plot(correctMeasures,
+     measuresWithPassingFailingTestCases )
+abline(a = 0, b = 1)
+@
+\caption{Passing/failing test cases, producing an intercept change}
+\label{fig:passing-failing}
+\end{figure}
+
+\section{Impact}\label{sec:impact}
+
+The impact of test suites depends on how they are used. The motivation of this working paper is the execution of experimental studies, so we will discuss the impact in that context. A specific investigation would be needed in other cases, e.g., observational studies or data mining.
+
+\subsection{Designs That Experience a Negative Impact}
+
+The differences in measurements caused by test suites affect designs that incorporate programs as factors or components of experimental units, although not in all cases. A (non-exhaustive) list of affected designs would be as follows:
+
+\begin{itemize}
+\item \textit{Pre-post} designs, where two treatments are used sequentially, each associated with a particular test suite. If any of them contain \textit{redundant}, \textit{missing}, or \textit{always failing or passing} tests, the differences between the test suites would be confused with the treatment effect. For example, when comparing \texttt{correctTestSuite} and \texttt{testSuiteWithRedundanciesInAllTestCases} in a \textit{pre-post} design:
+
+\tiny
+<<echo = TRUE>>=
+controlSample <- 
+     sample(correctMeasures, 30)
+treatmentSample <- 
+     sample(measuresWithRedundanciesInAllTestCases, 30)
+
+respVar <- c(controlSample, treatmentSample)
+factor <- c(rep("control", length(controlSample)),
+            rep("treatment", length(treatmentSample)))
+df <- data.frame(respVar, factor)
+printCoefmat(coef(summary(
+     lm(respVar ~ 1 + factor, data = df))))
+@
+\normalsize
+
+\noindent we find that, on average, the treatment is $5$ units higher than the control, even though no such effect exists; those $5$ units are due to the test suites.
+
+\item The problems of the \textit{pre-post} design extend to any situation where treatment (or any other factor) is confused with the program. For example, the following design explores the factor \textit{Complexity}, which is operationalized by two programs measured with the test suites \texttt{correctTestSuite} and \texttt{testSuiteWithRedundanciesInAllTestCases}:
+
+\tiny
+<<echo = TRUE>>=
+controlSampleHighComplexity <- 
+     sample(correctMeasures, 15)
+controlSampleLowComplexity <- 
+     sample(measuresWithRedundanciesInAllTestCases, 15)
+treatmentSampleHighComplexity <- 
+     sample(correctMeasures, 15)
+treatmentSampleLowComplexity <- 
+     sample(measuresWithRedundanciesInAllTestCases, 15)
+
+respVar <- c(
+  controlSampleHighComplexity,
+  controlSampleLowComplexity,
+  treatmentSampleHighComplexity,
+  treatmentSampleLowComplexity)
+factor <- c(
+  rep("control", length(controlSampleHighComplexity) + 
+                 length(controlSampleLowComplexity)),
+  rep("treatment", length(treatmentSampleHighComplexity) + 
+                   length(treatmentSampleLowComplexity)))
+complexity <- c(
+  rep("HighComplexity", length(controlSampleHighComplexity)),
+  rep("LowComplexity",  length(controlSampleLowComplexity)),
+  rep("HighComplexity", length(treatmentSampleHighComplexity)),
+  rep("LowComplexity",  length(treatmentSampleLowComplexity)))
+df <- data.frame(respVar, factor, complexity)
+printCoefmat(coef(summary(
+     lm(respVar ~ 1 + factor + complexity, data = df))))
+@
+\normalsize
+
+\noindent where it seems that the low complexity of the program leads to a quality increase of $5$ units, but in reality, this increase is due to the test suites.
+
+\end{itemize}
+
+\subsection{Unimpacted Designs}
+
+In contrast, and this is important, well-designed experiments (e.g., comparison of two factors, blocked designs, factorial designs, fractional factorials, repeated measures, cross-over, etc.) will be correct if, regardless of the type of test suite used, we measure only one program with a single test suite across all experimental units. For example, if we take two random samples from the measurement with \texttt{testSuiteWithMissingTestCases}:
+
+\scriptsize
+<<echo = TRUE>>=
+controlSample <- 
+     sample(measuresWithMissingTestCases, 30)
+treatmentSample <- 
+     sample(measuresWithMissingTestCases, 30) + 5
+@
+\normalsize
+
+\noindent where the treatment produces an improvement over the control of $5$ units (i.e., $5$ more requirements implemented), the analysis:
+
+\scriptsize
+<<echo = TRUE>>=     
+respVar <- c(controlSample, treatmentSample)
+factor <- c(rep("control", length(controlSample)),
+            rep("treatment", length(treatmentSample)))
+df <- data.frame(respVar, factor)
+lm(respVar ~ 1 + factor, data = df)
+@
+\normalsize
+
+\noindent allows for the correct detection of the treatment effect.
+
+\section{Future Work}\label{sec:future}
+
+The work we have done is partial, as several aspects require a more detailed analysis:
+
+\begin{itemize}
+    \item It is unusual to operationalize external quality as the number of passed requirements/test cases, as it complicates comparing programs with different requirements. Usually, the value of external quality is defined as:
+    
+\scriptsize
+<<echo = TRUE>>=
+sum(identifiedImplementedRequirements)/10
+@
+\normalsize
+
+\noindent where $10$ is the total number of requirements of the program that we have used in the empirical modeling (of course, the value would be different for other programs). The range restriction produced by the transformation results in the distribution of measures being much more similar than in the non-transformed case, as observed in Figs.~\ref{fig:h1}-\ref{fig:h3}: All histograms have the same scale in the X-axis and, more importantly, a rather similar distribution (or shape). The impact of the test suites in the analysis of the transformed response variable is probably smaller than that of the original variable. It would be interesting to study to what extent this is true.
+
+\item If we know the number of requirements of a program and the composition of the test suites, we could try to perform a transformation of the measures obtained from the test suites \texttt{testSuiteWithRedundanciesInAllTestCases}, \texttt{testSuiteWithRedundanciesInSomeTestCases}, etc. so that they approximate the measures produced by the \texttt{correctTestSuite}. This could be especially interesting when comparing the results of published experiments that use different test suites.
+\end{itemize}
+
+\begin{figure}
+<<>>=
+h1 <- hist(correctMeasures/10)
+@
+\caption{Transformation of the measurements obtained with \textit{correctTestSuite}}
+\label{fig:h1}
+\end{figure}
+
+\begin{figure}
+<<>>=
+h2 <- hist(measuresWithRedundanciesInAllTestCases/20)
+@
+\caption{Transformation of the measurements obtained with \textit{testSuiteWithRedundanciesInAllTestCases}}
+\label{fig:h2}
+\end{figure}
+
+\begin{figure}
+<<>>=
+h3 <- hist(measuresWithRedundanciesInSomeTestCases/12)
+@
+\caption{Transformation of the measurements obtained with \textit{measuresWithRedundanciesInSomeTestCases}}
+\label{fig:h3}
+\end{figure}
+
+% Exceeds page limits, but the distribution is comparable
+%\begin{figure}
+<<>>=
+# h4 <- hist(measuresWithPassingFailingTestCases/11)
+# 
+@
+%\caption{Transformation of the measurements obtained with %\textit{testSuiteWithPassingFailingCases}}
+%\label{fig:h4}
+%\end{figure}
+%
+%\begin{figure}
+<<>>=
+# h5 <- hist(measuresWithMissingTestCases/8)
+# 
+@
+%\caption{Transformation of the measurements obtained with %\textit{testSuiteWithMissingTestCases}}
+%\label{fig:h5}
+%\end{figure}
+
+\section{Conclusions}\label{sec:conclusions}
+
+In this working paper, we have explored the influence of test suites on measuring external quality. This research is still ongoing, so there are several aspects that we still need to consider, in addition to those indicated in the Future Works Section. Nevertheless, it seems advisable to design test suites so that each aspect evaluated in the code (requirement or sub-requirement) has only one associated test case. Experimental subjects should also be informed about whether or not they should implement error cases, and the measurement should be performed accordingly.
+
+\bibliographystyle{IEEETran}
+\bibliography{main}
+
+\end{document}
